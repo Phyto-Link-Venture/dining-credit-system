@@ -83,6 +83,18 @@ const t: Record<string, Record<Lang, string>> = {
   removedTag: { en: 'REMOVED', zh: '已删除' },
   attachment: { en: 'Attachment', zh: '附件' },
   fileAttached: { en: 'File attached', zh: '已附文件' },
+  installApp: { en: 'Install App', zh: '安装应用' },
+  installDismiss: { en: 'Maybe later', zh: '稍后再说' },
+  installIosTitle: { en: 'Install on iPhone', zh: '安装到 iPhone' },
+  installIosStep1: { en: '1. Tap the Share button', zh: '1. 点击分享按钮' },
+  installIosStep2: { en: '2. Scroll down and tap "Add to Home Screen"', zh: '2. 向下滑动，点击「添加到主屏幕」' },
+  installIosStep3: { en: '3. Tap "Add" to confirm', zh: '3. 点击「添加」确认' },
+  installAndroidTitle: { en: 'Install on Android', zh: '安装到 Android' },
+  installAndroidStep1: { en: '1. Tap the menu (⋮) in your browser', zh: '1. 点击浏览器菜单 (⋮)' },
+  installAndroidStep2: { en: '2. Tap "Install app" or "Add to Home Screen"', zh: '2. 点击「安装应用」或「添加到主屏幕」' },
+  installAndroidStep3: { en: '3. Tap "Install" to confirm', zh: '3. 点击「安装」确认' },
+  installNative: { en: 'Install', zh: '安装' },
+  installDesc: { en: 'Get the full app experience — works offline!', zh: '获得完整应用体验 — 支持离线使用！' },
   restore: { en: 'Restore', zh: '恢复' },
   restored: { en: 'Record restored!', zh: '记录已恢复！' },
   deletedBy: { en: 'Removed on', zh: '删除于' },
@@ -301,6 +313,10 @@ export default function Home() {
   const [showDeleted, setShowDeleted] = useState(false);
   const [actionTab, setActionTab] = useState<'topup' | 'deduct'>('topup');
   const [viewDeleteProof, setViewDeleteProof] = useState<{ type: string; signature: string; reason: string; date: string } | null>(null);
+  const [showInstall, setShowInstall] = useState(false);
+  const [installPrompt, setInstallPrompt] = useState<any>(null);
+  const [isStandalone, setIsStandalone] = useState(false);
+  const [platform, setPlatform] = useState<'ios' | 'android' | 'other'>('other');
 
   useEffect(() => {
     const s = localStorage.getItem('dining-lang'); if (s === 'zh' || s === 'en') setLang(s);
@@ -308,6 +324,24 @@ export default function Home() {
   }, []);
   useEffect(() => { document.documentElement.classList.toggle('dark', dark); localStorage.setItem('dining-dark', String(dark)); }, [dark]);
   useEffect(() => { localStorage.setItem('dining-lang', lang); }, [lang]);
+
+  // PWA install detection
+  useEffect(() => {
+    const standalone = window.matchMedia('(display-mode: standalone)').matches || (navigator as any).standalone;
+    setIsStandalone(!!standalone);
+    const ua = navigator.userAgent.toLowerCase();
+    if (/iphone|ipad|ipod/.test(ua)) setPlatform('ios');
+    else if (/android/.test(ua)) setPlatform('android');
+    else setPlatform('other');
+    // Show install banner if not already installed and not dismissed recently
+    const dismissed = localStorage.getItem('dining-install-dismissed');
+    if (!standalone && (!dismissed || Date.now() - parseInt(dismissed) > 7 * 24 * 60 * 60 * 1000)) {
+      setTimeout(() => setShowInstall(true), 3000); // Show after 3s
+    }
+    const handler = (e: Event) => { e.preventDefault(); setInstallPrompt(e); };
+    window.addEventListener('beforeinstallprompt', handler);
+    return () => window.removeEventListener('beforeinstallprompt', handler);
+  }, []);
 
   const showToast = (msg: string, type: 'success' | 'error' = 'success') => { setToast({ msg, type }); setTimeout(() => setToast(null), 3000); };
 
@@ -450,6 +484,74 @@ export default function Home() {
         </div>
       )}
 
+      {/* Install Banner */}
+      {showInstall && !isStandalone && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center z-50" onClick={() => { setShowInstall(false); localStorage.setItem('dining-install-dismissed', String(Date.now())); }}>
+          <div className="bg-white dark:bg-gray-800 rounded-t-3xl sm:rounded-3xl p-6 w-full max-w-md animate-slide-up" onClick={e => e.stopPropagation()}>
+            <div className="w-12 h-1 bg-gray-300 dark:bg-gray-600 rounded-full mx-auto mb-4 sm:hidden" />
+            <div className="text-center mb-5">
+              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center mx-auto mb-3 shadow-lg shadow-amber-200 dark:shadow-none">
+                <span className="text-3xl">🍽️</span>
+              </div>
+              <h3 className="font-bold text-lg text-gray-900 dark:text-white">{t.installApp[lang]}</h3>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{t.installDesc[lang]}</p>
+            </div>
+
+            {installPrompt ? (
+              <button onClick={async () => { installPrompt.prompt(); const r = await installPrompt.userChoice; if (r.outcome === 'accepted') setShowInstall(false); setInstallPrompt(null); }}
+                className="w-full py-3.5 bg-amber-500 text-white text-sm font-semibold rounded-xl hover:bg-amber-600 transition shadow-lg shadow-amber-200 dark:shadow-none mb-3">
+                📲 {t.installNative[lang]}
+              </button>
+            ) : (
+              <div className="bg-gray-50 dark:bg-gray-700/50 rounded-2xl p-4 mb-4">
+                {platform === 'ios' ? (
+                  <div>
+                    <p className="font-medium text-sm text-gray-900 dark:text-white mb-3">{t.installIosTitle[lang]}</p>
+                    <div className="space-y-2.5">
+                      <div className="flex items-start gap-3">
+                        <span className="text-lg">⬆️</span>
+                        <p className="text-sm text-gray-600 dark:text-gray-300">{t.installIosStep1[lang]} <span className="inline-block border border-gray-300 dark:border-gray-600 rounded px-1.5 py-0.5 text-xs">⬆️</span></p>
+                      </div>
+                      <div className="flex items-start gap-3">
+                        <span className="text-lg">➕</span>
+                        <p className="text-sm text-gray-600 dark:text-gray-300">{t.installIosStep2[lang]}</p>
+                      </div>
+                      <div className="flex items-start gap-3">
+                        <span className="text-lg">✅</span>
+                        <p className="text-sm text-gray-600 dark:text-gray-300">{t.installIosStep3[lang]}</p>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div>
+                    <p className="font-medium text-sm text-gray-900 dark:text-white mb-3">{t.installAndroidTitle[lang]}</p>
+                    <div className="space-y-2.5">
+                      <div className="flex items-start gap-3">
+                        <span className="text-lg">⋮</span>
+                        <p className="text-sm text-gray-600 dark:text-gray-300">{t.installAndroidStep1[lang]}</p>
+                      </div>
+                      <div className="flex items-start gap-3">
+                        <span className="text-lg">📲</span>
+                        <p className="text-sm text-gray-600 dark:text-gray-300">{t.installAndroidStep2[lang]}</p>
+                      </div>
+                      <div className="flex items-start gap-3">
+                        <span className="text-lg">✅</span>
+                        <p className="text-sm text-gray-600 dark:text-gray-300">{t.installAndroidStep3[lang]}</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <button onClick={() => { setShowInstall(false); localStorage.setItem('dining-install-dismissed', String(Date.now())); }}
+              className="w-full py-3 text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition">
+              {t.installDismiss[lang]}
+            </button>
+          </div>
+        </div>
+      )}
+
       {showSignature && <DeductSignModal amount={pendingDeduct} lang={lang} onSave={doDeduct} onCancel={() => setShowSignature(false)} />}
       {viewingSig && <SigViewer txn={viewingSig} lang={lang} onClose={() => setViewingSig(null)} />}
       {deleteTarget && <DeleteModal lang={lang} reason={deleteReason} setReason={setDeleteReason} onSave={doDelete} onCancel={() => { setDeleteTarget(null); setDeleteReason(''); }} />}
@@ -490,6 +592,11 @@ export default function Home() {
             <p className="text-sm text-gray-400 mt-0.5">{t.appDesc[lang]}</p>
           </div>
           <div className="flex items-center gap-2 mt-1">
+            {!isStandalone && (
+              <button onClick={() => setShowInstall(true)} className="w-9 h-9 rounded-xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 flex items-center justify-center text-sm hover:bg-gray-50 dark:hover:bg-gray-700 transition shadow-sm" title={t.installApp[lang]}>
+                📲
+              </button>
+            )}
             <button onClick={() => setLang(lang === 'en' ? 'zh' : 'en')} className="w-9 h-9 rounded-xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 flex items-center justify-center text-xs font-bold text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition shadow-sm">
               {lang === 'en' ? '中' : 'EN'}
             </button>
