@@ -317,6 +317,7 @@ export default function Home() {
   const [installPrompt, setInstallPrompt] = useState<any>(null);
   const [isStandalone, setIsStandalone] = useState(false);
   const [platform, setPlatform] = useState<'ios' | 'android' | 'other'>('other');
+  const [isOffline, setIsOffline] = useState(false);
 
   useEffect(() => {
     const s = localStorage.getItem('dining-lang'); if (s === 'zh' || s === 'en') setLang(s);
@@ -324,6 +325,16 @@ export default function Home() {
   }, []);
   useEffect(() => { document.documentElement.classList.toggle('dark', dark); localStorage.setItem('dining-dark', String(dark)); }, [dark]);
   useEffect(() => { localStorage.setItem('dining-lang', lang); }, [lang]);
+
+  // Offline detection
+  useEffect(() => {
+    setIsOffline(!navigator.onLine);
+    const goOffline = () => { setIsOffline(true); showToast(lang === 'zh' ? '⚠️ 网络已断开 — 部分功能不可用' : '⚠️ You are offline — some features unavailable', 'error'); };
+    const goOnline = () => { setIsOffline(false); showToast(lang === 'zh' ? '✅ 网络已恢复' : '✅ Back online', 'success'); fetchCustomers(); };
+    window.addEventListener('offline', goOffline);
+    window.addEventListener('online', goOnline);
+    return () => { window.removeEventListener('offline', goOffline); window.removeEventListener('online', goOnline); };
+  }, [lang]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // PWA install detection
   useEffect(() => {
@@ -402,7 +413,11 @@ export default function Home() {
   // Re-fetch selected customer when showDeleted changes
   useEffect(() => { if (selected) selectCustomer(selected); }, [showDeleted]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const offlineMsg = lang === 'zh' ? '⚠️ 无网络连接，无法执行此操作' : '⚠️ No internet — cannot perform this action';
+  const checkOnline = () => { if (!navigator.onLine) { showToast(offlineMsg, 'error'); return false; } return true; };
+
   const registerCustomer = async () => {
+    if (!checkOnline()) return;
     if (!newName || !newPhone) { showToast(t.fillFields[lang], 'error'); return; }
     const res = await fetch('/api/customers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: newName, phone: newPhone }) });
     if (res.ok) { showToast(t.registered[lang]); setNewName(''); setNewPhone(''); fetchCustomers(); }
@@ -410,6 +425,7 @@ export default function Home() {
   };
 
   const doTopup = async () => {
+    if (!checkOnline()) return;
     const amount = parseFloat(topupAmount);
     if (!amount || !selected) return;
     const res = await fetch('/api/topup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ customer_id: selected.id, amount, promotion_id: selectedPromo, attachment: topupAttachment }) });
@@ -421,6 +437,7 @@ export default function Home() {
   };
 
   const initiateDeduct = () => {
+    if (!checkOnline()) return;
     const amount = parseFloat(deductAmount);
     if (!amount || !selected) return;
     if (amount > selected.balance) { showToast(t.insufficient[lang], 'error'); return; }
@@ -439,6 +456,7 @@ export default function Home() {
   };
 
   const doDelete = async (signature: string) => {
+    if (!checkOnline()) return;
     if (!deleteTarget) return;
     const res = await fetch('/api/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...deleteTarget, signature, reason: deleteReason }) });
     setDeleteTarget(null); setDeleteReason('');
@@ -450,6 +468,7 @@ export default function Home() {
   };
 
   const doRestore = async (type: 'customer' | 'transaction', id: number) => {
+    if (!checkOnline()) return;
     const res = await fetch('/api/restore', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type, id }) });
     if (res.ok) {
       showToast(t.restored[lang]);
@@ -459,6 +478,7 @@ export default function Home() {
   };
 
   const addPromo = async () => {
+    if (!checkOnline()) return;
     if (!newPromoName || !newPromoTopup || !newPromoBonus) { showToast(t.fillFields[lang], 'error'); return; }
     const res = await fetch('/api/promotions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: newPromoName, topup_amount: parseFloat(newPromoTopup), bonus_amount: parseFloat(newPromoBonus) }) });
     if (res.ok) { showToast(t.promoAdded[lang]); setNewPromoName(''); setNewPromoTopup(''); setNewPromoBonus(''); fetchPromotions(); }
@@ -582,6 +602,16 @@ export default function Home() {
       )}
 
       <div className="max-w-lg mx-auto px-4 pb-24 pt-6">
+        {/* Offline Banner */}
+        {isOffline && (
+          <div className="mb-4 bg-red-500 text-white rounded-2xl p-3 flex items-center gap-3 shadow-lg animate-fade-in">
+            <span className="text-xl">📡</span>
+            <div>
+              <p className="text-sm font-semibold">{lang === 'zh' ? '无网络连接' : 'No Internet Connection'}</p>
+              <p className="text-xs text-white/80">{lang === 'zh' ? '充值、扣款等操作需要网络。请使用 APK 版本实现完全离线使用。' : 'Top up, deduct and other operations need internet. Use the APK version for full offline use.'}</p>
+            </div>
+          </div>
+        )}
         {/* Header */}
         <div className="flex items-start justify-between mb-6">
           <div>
