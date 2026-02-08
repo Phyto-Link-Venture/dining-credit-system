@@ -1,0 +1,13 @@
+{
+  "name": "Dining Credit System",
+  "short_name": "Dining Credit",
+  "description": "Prepaid meal credit management system",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#d97706",
+  "orientation": "portrait",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}
