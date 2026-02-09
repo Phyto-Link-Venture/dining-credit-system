@@ -95,6 +95,9 @@ const t: Record<string, Record<Lang, string>> = {
   installAndroidStep3: { en: '3. Tap "Install" to confirm', zh: '3. 点击「安装」确认' },
   installNative: { en: 'Install', zh: '安装' },
   installDesc: { en: 'Get the full app experience — works offline!', zh: '获得完整应用体验 — 支持离线使用！' },
+  phoneExists: { en: 'This phone number is already registered to', zh: '此电话号码已注册给' },
+  phoneDeleted: { en: 'This phone was previously registered (deleted). Restore it instead?', zh: '此电话号码曾注册过（已删除）。是否恢复？' },
+  nameExists: { en: 'A customer with this name already exists', zh: '已存在同名客户' },
   restore: { en: 'Restore', zh: '恢复' },
   restored: { en: 'Record restored!', zh: '记录已恢复！' },
   deletedBy: { en: 'Removed on', zh: '删除于' },
@@ -421,7 +424,13 @@ export default function Home() {
     if (!newName || !newPhone) { showToast(t.fillFields[lang], 'error'); return; }
     const res = await fetch('/api/customers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: newName, phone: newPhone }) });
     if (res.ok) { showToast(t.registered[lang]); setNewName(''); setNewPhone(''); fetchCustomers(); }
-    else { showToast((await res.json()).error, 'error'); }
+    else {
+      const data = await res.json();
+      if (data.error === 'PHONE_EXISTS') showToast(`${t.phoneExists[lang]} "${data.name}"`, 'error');
+      else if (data.error === 'PHONE_DELETED') showToast(t.phoneDeleted[lang], 'error');
+      else if (data.error === 'NAME_EXISTS') showToast(`${t.nameExists[lang]} (📞 ${data.phone})`, 'error');
+      else showToast(data.error, 'error');
+    }
   };
 
   const doTopup = async () => {

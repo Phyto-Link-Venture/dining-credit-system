@@ -14,12 +14,23 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const { name, phone } = await req.json();
   if (!name || !phone) return NextResponse.json({ error: 'Name and phone required' }, { status: 400 });
-  try {
-    const result = db.prepare('INSERT INTO customers (name, phone) VALUES (?, ?)').run(name, phone);
-    const customer = db.prepare('SELECT * FROM customers WHERE id = ?').get(result.lastInsertRowid);
-    return NextResponse.json(customer, { status: 201 });
-  } catch (e: any) {
-    if (e.code === 'SQLITE_CONSTRAINT_UNIQUE') return NextResponse.json({ error: 'Phone number already registered' }, { status: 409 });
-    throw e;
+  
+  // Check for existing phone (including soft-deleted)
+  const existingPhone = db.prepare('SELECT * FROM customers WHERE phone = ?').get(phone) as any;
+  if (existingPhone) {
+    if (existingPhone.is_deleted) {
+      return NextResponse.json({ error: 'PHONE_DELETED', name: existingPhone.name }, { status: 409 });
+    }
+    return NextResponse.json({ error: 'PHONE_EXISTS', name: existingPhone.name }, { status: 409 });
   }
+  
+  // Check for existing name (including soft-deleted)
+  const existingName = db.prepare('SELECT * FROM customers WHERE name = ? AND is_deleted = 0').get(name) as any;
+  if (existingName) {
+    return NextResponse.json({ error: 'NAME_EXISTS', phone: existingName.phone }, { status: 409 });
+  }
+
+  const result = db.prepare('INSERT INTO customers (name, phone) VALUES (?, ?)').run(name, phone);
+  const customer = db.prepare('SELECT * FROM customers WHERE id = ?').get(result.lastInsertRowid);
+  return NextResponse.json(customer, { status: 201 });
 }
